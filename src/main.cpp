@@ -12,6 +12,7 @@
 #include "ShaderEditor.h"
 #include "Renderer.h"
 #include "FFT.h"
+#include "FileWatcher.h"
 #include "MIDI.h"
 #include "Timer.h"
 #include "Misc.h"
@@ -362,6 +363,11 @@ int main( int argc, const char *argv[] )
     }
   }
 
+  auto shaderFileWatch = FileWatcher::Init(Renderer::defaultShaderFilename);
+  if (shaderFileWatch < 0) {
+    printf("Couldn't set up file notification watch for %s\n", Renderer::defaultShaderFilename);
+  }
+
   Misc::InitKeymaps();
 
 #ifdef SCI_LEXER
@@ -402,6 +408,24 @@ int main( int argc, const char *argv[] )
   float fLastTimeMS = Timer::GetTime();
   while (!Renderer::WantsToQuit())
   {
+    if (FileWatcher::NeedsReload(shaderFileWatch)) {
+      FILE * f = fopen(Renderer::defaultShaderFilename,"rb");
+      if (f) {
+        memset(szShader, 0, 65535);
+        fread(szShader, 1, 65535, f);
+        fclose(f);
+        mShaderEditor.SetText(szShader);
+        if (Renderer::ReloadShader(szShader, (int)strlen(szShader), szError, 4096)) {
+          printf("Shader reloaded\n");
+          mDebugOutput.SetText("");
+        }
+        else {
+          printf("Shader reload error:\n%s", szError);
+          mDebugOutput.SetText(szError);
+        }
+      }
+    }
+
     bool newShader = false;
     float time = Timer::GetTime() / 1000.0; // seconds
     Renderer::StartFrame();
